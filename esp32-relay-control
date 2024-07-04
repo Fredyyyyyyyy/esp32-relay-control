@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESP32 Relay Control</title>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <style>
+        .switch {
+          position: relative;
+          display: inline-block;
+          width: 60px;
+          height: 34px;
+        }
+        .switch input {
+          opacity: 0;
+          width: 0;
+          height: 0;
+        }
+        .slider {
+          position: absolute;
+          cursor: pointer;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background-color: #ccc;
+          transition: .4s;
+          border-radius: 34px;
+        }
+        .slider:before {
+          position: absolute;
+          content: "";
+          height: 26px;
+          width: 26px;
+          left: 4px;
+          bottom: 4px;
+          background-color: white;
+          transition: .4s;
+          border-radius: 50%;
+        }
+        input:checked + .slider {
+          background-color: #2196F3;
+        }
+        input:checked + .slider:before {
+          transform: translateX(26px);
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <div class="container mx-auto px-4 py-8">
+        <div class="bg-white shadow-lg rounded-lg p-6">
+            <h1 class="text-3xl font-bold text-center mb-6">ESP32 Relay Control Panel</h1>
+            
+            <div class="flex justify-center items-center mb-6">
+                <div id="relayStatus" class="text-2xl font-semibold mr-4">OFF</div>
+                <label class="switch">
+                    <input type="checkbox" id="relayToggle">
+                    <span class="slider"></span>
+                </label>
+            </div>
+            
+            <div id="connectionStatus" class="text-center mb-6 font-semibold text-red-500">Disconnected from Firebase</div>
+            
+            <div class="mb-6">
+                <h2 class="text-xl font-semibold mb-2">Relay State History</h2>
+                <canvas id="relayChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Firebase konfigurácia
+        const firebaseConfig = {
+            apiKey: "VasaApiKey",
+            authDomain: "vas-projekt.firebaseapp.com",
+            databaseURL: "https://vas-projekt.firebaseio.com",
+            projectId: "vas-projekt",
+            storageBucket: "vas-projekt.appspot.com",
+            messagingSenderId: "VasMessagingSenderId",
+            appId: "VasAppId"
+        };
+
+        // Inicializácia Firebase
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+        const relayRef = database.ref('relay');
+
+        const relayStatus = document.getElementById('relayStatus');
+        const connectionStatus = document.getElementById('connectionStatus');
+        const relayToggle = document.getElementById('relayToggle');
+
+        // Graf
+        const ctx = document.getElementById('relayChart').getContext('2d');
+        const chart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Relay State',
+                    data: [],
+                    borderColor: 'rgb(75, 192, 192)',
+                    tension: 0.1
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 1
+                    }
+                }
+            }
+        });
+
+        // Sledovanie zmien stavu relé
+        relayRef.on('value', (snapshot) => {
+            const relayState = snapshot.val();
+            updateRelayStatus(relayState);
+            updateChart(relayState);
+        });
+
+        // Sledovanie stavu pripojenia
+        database.ref('.info/connected').on('value', (snap) => {
+            if (snap.val() === true) {
+                connectionStatus.innerHTML = 'Connected to Firebase';
+                connectionStatus.className = 'text-center mb-6 font-semibold text-green-500';
+            } else {
+                connectionStatus.innerHTML = 'Disconnected from Firebase';
+                connectionStatus.className = 'text-center mb-6 font-semibold text-red-500';
+            }
+        });
+
+        relayToggle.onchange = function() {
+            relayRef.set(this.checked);
+        };
+
+        function updateRelayStatus(state) {
+            relayStatus.innerHTML = state ? 'ON' : 'OFF';
+            relayStatus.className = state ? 'text-2xl font-semibold mr-4 text-green-500' : 'text-2xl font-semibold mr-4 text-red-500';
+            relayToggle.checked = state;
+        }
+
+        function updateChart(state) {
+            const now = new Date();
+            chart.data.labels.push(now.toLocaleTimeString());
+            chart.data.datasets[0].data.push(state ? 1 : 0);
+            
+            if (chart.data.labels.length > 20) {
+                chart.data.labels.shift();
+                chart.data.datasets[0].data.shift();
+            }
+            
+            chart.update();
+        }
+    </script>
+</body>
+</html>
